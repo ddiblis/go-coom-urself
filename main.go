@@ -3,32 +3,33 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
+	"os"
+	"strings"
+	"sync"
 )
 
 var client http.Client
 
 type Attachments []struct {
-	Name string `json:"name"`
 	Path string `json:"path"`
 }
 
 type Page []struct {
 	Attachments Attachments `json:"attachments"`
 	Content     string      `json:"content"`
-	File        Attachments `json:"file"`
 	ID          string      `json:"id"`
-	Service     string      `json:"service"`
+	Published   string      `json:"published"`
 	Title       string      `json:"title"`
 }
 
-type Artist []struct {
-	Links Page
+type Artist struct {
+	Pages []Page
 }
 
-func getData(link string) {
-
+func getBody(link string) io.ReadCloser {
 	req, err := http.NewRequest("GET", link, nil)
 	if err != nil {
 		log.Fatal(err)
@@ -39,15 +40,78 @@ func getData(link string) {
 		log.Fatalf("Status code error: %d: %s", res.StatusCode, res.Status)
 	}
 
-	defer res.Body.Close()
+	return res.Body
+}
 
-	artist := Page{}
-	json.NewDecoder(res.Body).Decode(&artist)
-	fmt.Print(artist)
+func getPage(link string) Page {
+	page := Page{}
+	json.NewDecoder(getBody(link)).Decode(&page)
+	return page
+}
+
+func getArtist(service string, artistName string) {
+	i := 0
+	var wg sync.WaitGroup
+
+	for empty := false; !empty; {
+		page := i * 25
+		url := fmt.Sprintf("https://coomer.party/api/%s/user/%s?o=%d", service, artistName, page)
+		pages := getPage(url)
+		if len(pages) == 0 {
+			empty = true
+		}
+		for _, page := range pages {
+			wg.Add(len(page.Attachments))
+			path := fmt.Sprintf("%s/%s/%s", service, artistName, page.Published)
+			os.MkdirAll(path, os.ModePerm)
+			getText(path, page.Content)
+			for j, img := range page.Attachments {
+				go func(j int) {
+					fmt.Println(img)
+					defer wg.Done()
+					extension := strings.Split(img.Path, ".")[1]
+					imgurl := fmt.Sprintf("https://data16.coomer.party/data/%s", img.Path)
+					imgpath := fmt.Sprintf("%s/%d.%s", path, j, extension)
+					getPosts(imgpath, imgurl)
+				}(j)
+			}
+			wg.Wait()
+		}
+		i += 1
+	}
+}
+
+// file, _ := json.MarshalIndent(artist, "", " ")
+// _ = ioutil.WriteFile("test.json", file, 0644)
+
+func getText(path string, text string) {
+	file, err := os.Create(fmt.Sprintf("%s/post.txt", path))
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer file.Close()
+
+	_, err = file.WriteString(text)
+	if err != nil {
+		log.Fatal(err)
+	}
+}
+
+func getPosts(filename string, url string) {
+	file, err := os.Create(filename)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer file.Close()
+
+	_, err = io.Copy(file, getBody(url))
+	if err != nil {
+		log.Fatal(err)
+	}
 }
 
 func main() {
-	getData("https://coomer.party/api/onlyfans/user/belledelphine")
+	getArtist("onlyfans", "belledelphine")
 }
 
 // func init() {
