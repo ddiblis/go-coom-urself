@@ -89,9 +89,14 @@ func displayTable(artists Artists, service string) {
 }
 
 func main() {
-	// sites := Sites{}
-	// sites.getArtists()
-	// getArtist("onlyfans", "belledelphine")
+
+	updateArtists := flag.Bool("update", false, "update creators.json")
+
+	if *updateArtists {
+		sites := Sites{}
+		sites.getArtists()
+	}
+
 	cm, km := searchArtists("belledelphine")
 
 	displayTable(cm, "Coomer")
