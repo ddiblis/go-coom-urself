@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"flag"
 	"fmt"
 	"io"
 	"log"
@@ -10,6 +9,7 @@ import (
 	"os"
 
 	"github.com/jedib0t/go-pretty/v6/table"
+	"github.com/urfave/cli/v2"
 )
 
 var client http.Client
@@ -89,31 +89,106 @@ func displayTable(artists Artists, service string) {
 }
 
 func main() {
+	var name string
+	var cm, km Artists
 
-	updateArtists := flag.Bool("update", false, "update creators.json")
+	app := &cli.App{
+		Flags: []cli.Flag{
+			&cli.BoolFlag{
+				Name:    "coomer",
+				Aliases: []string{"c"},
+				Value:   false,
+				Usage:   "search coomer.party",
+			},
+			&cli.BoolFlag{
+				Name:    "kemono",
+				Aliases: []string{"k"},
+				Value:   false,
+				Usage:   "search kemono.party",
+			},
+			&cli.StringFlag{
+				Name:        "name",
+				Aliases:     []string{"n"},
+				Usage:       "name of the artist",
+				Destination: &name,
+			},
+		},
+		Commands: []*cli.Command{
+			{
+				Name:    "download",
+				Aliases: []string{"d"},
+				Usage:   "Download all media of certain artist",
+				Action: func(cli *cli.Context) error {
+					cm, km := searchArtists(name)
 
-	if *updateArtists {
-		sites := Sites{}
-		sites.getArtists()
+					displayTable(cm, "Coomer")
+					displayTable(km, "Kemono")
+
+					var i int
+					_, err := fmt.Scanf("%d", &i)
+					if err != nil {
+						log.Fatal("err")
+					}
+
+					if cli.FlagNames()[0] == "c" {
+						getArtist(cm[i].Service, cm[i].ID, "https://coomer.party/api/%s/user/%s?o=%d", "c")
+					} else if cli.FlagNames()[0] == "k" {
+						getArtist(km[i].Service, km[i].ID, "https://kemono.party/api/%s/user/%s?o=%d", "k")
+					}
+
+					return nil
+				},
+			},
+			{
+				Name:    "update",
+				Aliases: []string{"u"},
+				Usage:   "Update artist list",
+				Action: func(*cli.Context) error {
+					fmt.Println("updating artist list")
+					sites := Sites{}
+					sites.getArtists()
+					return nil
+				},
+			},
+			{
+				Name:    "table",
+				Aliases: []string{"t"},
+				Usage:   "Search artists list for artist Name",
+				Action: func(cli *cli.Context) error {
+					cm, km = searchArtists(cli.Args().First())
+
+					displayTable(cm, "Coomer")
+					displayTable(km, "Kemono")
+					return nil
+				},
+			},
+		},
 	}
 
-	cm, km := searchArtists("belledelphine")
-
-	displayTable(cm, "Coomer")
-	displayTable(km, "Kemono")
-
-	useKemono := flag.Bool("k", false, "Search kemono.party")
-	useCoomer := flag.Bool("c", false, "Search coomer.party")
-	idx := flag.Int("i", 0, "index of desired artist")
-
-	flag.Parse()
-
-	if *useCoomer {
-		getArtist(cm[*idx].Service, cm[*idx].ID, "https://coomer.party/api/%s/user/%s?o=%d", "c")
-		return
-	}
-
-	if *useKemono {
-		getArtist(km[*idx].Service, km[*idx].ID, "https://kemono.party/api/%s/user/%s?o=%d", "k")
+	if err := app.Run(os.Args); err != nil {
+		log.Fatal(err)
 	}
 }
+
+// {
+// 	Name:    "coomer",
+// 	Aliases: []string{"c"},
+// 	Usage:   "Search coomer.party",
+// 	Action: func(cli *cli.Context) error {
+// 		// intVar, _ := strconv.Atoi(cli.Args().Slice()[1])
+// 		// cm, _ := searchArtists(cli.Args().First())
+// 		// getArtist(cm[intVar].Service, cm[intVar].ID, "https://coomer.party/api/%s/user/%s?o=%d", "c")
+// 		return nil
+// 	},
+// },
+// {
+// 	Name:    "kemono",
+// 	Aliases: []string{"k"},
+// 	Usage:   "Search kemono.party",
+// 	Action: func(cli *cli.Context) error {
+// 		intVar, _ := strconv.Atoi(cli.Args().Slice()[1])
+// 		_, km := searchArtists(cli.Args().First())
+// 		getArtist(km[intVar].Service, km[intVar].ID, "https://kemono.party/api/%s/user/%s?o=%d", "k")
+// 		return nil
+// 	},
+// },
